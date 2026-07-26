@@ -97,6 +97,7 @@ def handle_post(
     resolve_open_target: Callable[[Any, str], Any],
     open_in_explorer: Callable[[Any], None],
     runtime_output_dir: Any,
+    import_paper_package: Callable[[bytes], dict[str, object]] | None = None,
 ) -> bool:
     if parsed.path == "/api/settings":
         handler.write_json(save_settings(read_json_body()))
@@ -153,6 +154,17 @@ def handle_post(
             ensure_upload_ready()
             task = create_upload_task(file_name, read_binary_body())
             handler.write_json(task, status=HTTPStatus.CREATED)
+        except ValueError as error:
+            handler.write_json({"error": str(error)}, status=HTTPStatus.BAD_REQUEST)
+        return True
+
+    if parsed.path == "/api/library/import-paper":
+        if import_paper_package is None:
+            handler.write_json({"error": "文献包导入功能不可用"}, status=HTTPStatus.NOT_FOUND)
+            return True
+        try:
+            paper = import_paper_package(read_binary_body())
+            handler.write_json(paper, status=HTTPStatus.CREATED)
         except ValueError as error:
             handler.write_json({"error": str(error)}, status=HTTPStatus.BAD_REQUEST)
         return True

@@ -32,6 +32,7 @@ class ServerBindings:
         create_upload_task_getter: Callable[[], Callable[[str, bytes], dict[str, object]]],
         import_zotero_paper_getter: Callable[[], Callable[[str], dict[str, object]]],
         retry_upload_task_getter: Callable[[], Callable[[str], dict[str, object]]],
+        import_paper_package_getter: Callable[[], Callable[[bytes], dict[str, object]]],
         get_record_getter: Callable[[], Callable[[str], Any]],
         resolve_open_target_getter: Callable[[], Callable[[Any, str], Any]],
         open_in_explorer_getter: Callable[[], Callable[[Any], None]],
@@ -69,6 +70,7 @@ class ServerBindings:
         self._create_upload_task_getter = create_upload_task_getter
         self._import_zotero_paper_getter = import_zotero_paper_getter
         self._retry_upload_task_getter = retry_upload_task_getter
+        self._import_paper_package_getter = import_paper_package_getter
         self._get_record_getter = get_record_getter
         self._resolve_open_target_getter = resolve_open_target_getter
         self._open_in_explorer_getter = open_in_explorer_getter
@@ -112,6 +114,7 @@ class ServerBindings:
             create_upload_task=self._create_upload_task_getter(),
             import_zotero_paper=self._import_zotero_paper_getter(),
             retry_upload_task=self._retry_upload_task_getter(),
+            import_paper_package=self._import_paper_package_getter(),
             get_record=self._get_record_getter(),
             list_papers=self._list_papers_getter(),
             resolve_open_target=self._resolve_open_target_getter(),
@@ -224,6 +227,7 @@ def build_app_post_bindings(
     create_upload_task: Callable[[str, bytes], dict[str, object]],
     import_zotero_paper: Callable[[str], dict[str, object]],
     retry_upload_task: Callable[[str], dict[str, object]],
+    import_paper_package: Callable[[bytes], dict[str, object]],
     get_record: Callable[[str], Any],
     list_papers: Callable[[], list[dict[str, object]]],
     resolve_open_target: Callable[[Any, str], Any],
@@ -237,6 +241,7 @@ def build_app_post_bindings(
         "create_upload_task": create_upload_task,
         "import_zotero_paper": import_zotero_paper,
         "retry_upload_task": retry_upload_task,
+        "import_paper_package": import_paper_package,
         "activate_memory_candidate": lambda item_id: gui_memory_candidates.activate_memory_candidate(
             memory_root,
             item_id,

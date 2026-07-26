@@ -17,6 +17,9 @@
 
 
     <style name="AppTheme.NoActionBarLaunch" parent="Theme.SplashScreen">
-        <item name="android:background">@drawable/splash</item>
+        <item name="android:background">@drawable/cark_splash</item>
+        <item name="windowSplashScreenBackground">@color/cark_splash_background</item>
+        <item name="windowSplashScreenAnimatedIcon">@drawable/ic_cark_splash</item>
+        <item name="postSplashScreenTheme">@style/AppTheme.NoActionBar</item>
     </style>
 </resources>

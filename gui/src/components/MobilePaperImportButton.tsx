@@ -3,11 +3,11 @@ import { useRef, useState } from 'react'
 
 import type { PaperSummary } from '@/types'
 import { setApiBaseUrl } from '@/utils/apiBase'
-import { importMobilePaperPackage } from '@/utils/mobilePaperPackage'
+import { importMobileTransferPackage } from '@/utils/mobilePaperPackage'
 
 interface MobilePaperImportButtonProps {
   compact?: boolean
-  onImported?: (paper: PaperSummary) => void
+  onImported?: (papers: PaperSummary[]) => void
 }
 
 export function MobilePaperImportButton({ compact = false, onImported }: MobilePaperImportButtonProps) {
@@ -20,9 +20,9 @@ export function MobilePaperImportButton({ compact = false, onImported }: MobileP
     setImporting(true)
     setError(null)
     try {
-      const paper = await importMobilePaperPackage(file)
+      const papers = await importMobileTransferPackage(file)
       setApiBaseUrl('')
-      onImported?.(paper)
+      onImported?.(papers)
     } catch (importError) {
       setError(importError instanceof Error ? importError.message : '文献包导入失败')
     } finally {
@@ -36,7 +36,7 @@ export function MobilePaperImportButton({ compact = false, onImported }: MobileP
       <input
         ref={inputRef}
         type="file"
-        accept=".carkpaper,application/vnd.cark.paper+zip,application/zip,application/octet-stream"
+        accept=".carklibrary,.carkpaper,application/vnd.cark.library+zip,application/vnd.cark.paper+zip,application/zip,application/octet-stream"
         className="hidden"
         onChange={(event) => void handleFile(event.target.files?.[0])}
       />
@@ -49,7 +49,7 @@ export function MobilePaperImportButton({ compact = false, onImported }: MobileP
           : 'cark-button-accent inline-flex w-full items-center justify-center gap-2 rounded-full px-4 py-3 text-sm disabled:opacity-60'}
       >
         {importing ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <FileUp className="h-4 w-4" />}
-        {importing ? '正在校验并导入' : compact ? '导入文献包' : '从手机选择 .carkpaper'}
+        {importing ? '正在校验并导入' : compact ? '导入文献包' : '选择 .carklibrary / .carkpaper'}
       </button>
       {error ? <p className="mt-2 max-w-[320px] text-xs text-rose-300">{error}</p> : null}
     </div>

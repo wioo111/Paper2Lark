@@ -1,4 +1,5 @@
-import { ArrowRight, BookOpen, CheckCircle2, Circle, LoaderCircle, MessageSquareText, PackageOpen, Star, Tags } from 'lucide-react'
+import { Capacitor } from '@capacitor/core'
+import { ArrowRight, BookOpen, CheckCircle2, Circle, LoaderCircle, MessageSquareText, PackageOpen, Star, Tags, Trash2 } from 'lucide-react'
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 
@@ -14,6 +15,7 @@ interface PaperListItemProps {
   onFavoriteToggle?: (paper: PaperSummary) => void
   onReadingStatusChange?: (paper: PaperSummary, status: PaperReadingStatus) => void
   onTagsEdit?: (paper: PaperSummary) => void
+  onDelete?: (paper: PaperSummary) => void
 }
 
 const statusOptions: Array<{ value: PaperReadingStatus; label: string }> = [
@@ -29,7 +31,9 @@ export function PaperListItem({
   onFavoriteToggle,
   onReadingStatusChange,
   onTagsEdit,
+  onDelete,
 }: PaperListItemProps) {
+  const nativeApp = Capacitor.isNativePlatform()
   const readingStatus = paper.readingStatus ?? 'unread'
   const tags = paper.tags ?? []
   const offline = isPaperOffline(paper.id)
@@ -99,17 +103,19 @@ export function PaperListItem({
 
         <div className="flex shrink-0 flex-col items-end gap-2">
           <div className="flex items-center gap-2">
-            <button
-              type="button"
-              disabled={exporting}
-              onClick={() => void handlePackageExport()}
-              aria-label="Export mobile paper package"
-              title="导出手机文献包"
-              className="cark-button-secondary inline-flex h-9 items-center justify-center gap-1.5 rounded-full px-3 text-xs disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              {exporting ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <PackageOpen className="h-4 w-4" />}
-              {exporting ? '打包中' : '手机包'}
-            </button>
+            {!nativeApp ? (
+              <button
+                type="button"
+                disabled={exporting}
+                onClick={() => void handlePackageExport()}
+                aria-label="导出手机文献包"
+                title="导出手机文献包"
+                className="cark-button-secondary inline-flex h-9 items-center justify-center gap-1.5 rounded-full px-3 text-xs disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {exporting ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <PackageOpen className="h-4 w-4" />}
+                {exporting ? '打包中' : '手机包'}
+              </button>
+            ) : null}
             <button
               type="button"
               disabled={updating}
@@ -131,6 +137,17 @@ export function PaperListItem({
             >
               <Tags className="h-4 w-4" />
             </button>
+            {nativeApp && onDelete ? (
+              <button
+                type="button"
+                disabled={updating}
+                onClick={() => onDelete(paper)}
+                aria-label="删除本机文献"
+                className="cark-button-secondary inline-flex h-9 w-9 items-center justify-center rounded-full text-rose-200 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                <Trash2 className="h-4 w-4" />
+              </button>
+            ) : null}
           </div>
 
           {exportError ? <p className="max-w-36 text-right text-[11px] text-rose-300">{exportError}</p> : null}

@@ -1,3 +1,7 @@
+param(
+    [switch]$Release
+)
+
 $ErrorActionPreference = "Stop"
 
 $repoRoot = Split-Path -Parent $PSScriptRoot
@@ -35,8 +39,9 @@ try {
 
     Push-Location $androidRoot
     try {
-        & .\gradlew.bat assembleDebug
-        if ($LASTEXITCODE -ne 0) { throw "Android APK build failed." }
+        $gradleTask = if ($Release) { "bundleRelease" } else { "assembleDebug" }
+        & .\gradlew.bat $gradleTask
+        if ($LASTEXITCODE -ne 0) { throw "Android build failed: $gradleTask" }
     }
     finally {
         Pop-Location
@@ -46,9 +51,18 @@ finally {
     Pop-Location
 }
 
-$apkPath = Join-Path $androidRoot "app\build\outputs\apk\debug\app-debug.apk"
-if (-not (Test-Path $apkPath)) {
-    throw "APK was not found after the build: $apkPath"
+$artifactPath = if ($Release) {
+    Join-Path $androidRoot "app\build\outputs\bundle\release\app-release.aab"
+} else {
+    Join-Path $androidRoot "app\build\outputs\apk\debug\app-debug.apk"
 }
 
-Write-Output "APK: $apkPath"
+if (-not (Test-Path $artifactPath)) {
+    throw "Android artifact was not found after the build: $artifactPath"
+}
+
+if ($Release) {
+    Write-Output "AAB (unsigned; configure the application-store signing key before upload): $artifactPath"
+} else {
+    Write-Output "APK: $artifactPath"
+}

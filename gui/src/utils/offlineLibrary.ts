@@ -1,6 +1,7 @@
 import type { PaperDetail, PaperSummary, UpdatePaperLibraryInput } from '@/types'
 import { resolveMediaUrl } from '@/utils/markdown'
 import { withApiBaseUrl } from '@/utils/apiBase'
+import { removeOfflineReadingState } from '@/utils/offlineReadingState'
 
 export const PAPER_CACHE_NAME = 'cark-paper-v1'
 const OFFLINE_LIBRARY_KEY = 'cark-offline-library-v1'
@@ -9,6 +10,8 @@ export interface OfflinePaperEntry {
   id: string
   title: string
   downloadedAt: string
+  assetUrls?: string[]
+  packageBytes?: number
 }
 
 function readLibrary(): OfflinePaperEntry[] {
@@ -114,19 +117,70 @@ export async function downloadPaperForOffline(detail: PaperDetail) {
 }
 
 export async function removeOfflinePaper(paperId: string) {
+  const entry = readLibrary().find((item) => item.id === paperId)
   if ('caches' in window) {
     const cache = await window.caches.open(PAPER_CACHE_NAME)
     const keys = await cache.keys()
     const encodedId = encodeURIComponent(paperId)
+    const assetUrls = new Set(entry?.assetUrls ?? [])
     await Promise.all(
       keys
         .filter((request) => {
           const url = new URL(request.url)
           return url.pathname.includes(`/api/papers/${encodedId}`)
             || url.pathname.includes(`/api/media/${encodedId}`)
+            || assetUrls.has(`${url.pathname}${url.search}`)
         })
         .map((request) => cache.delete(request)),
     )
   }
+  removeOfflineReadingState(paperId)
   writeLibrary(readLibrary().filter((entry) => entry.id !== paperId))
+}
+
+export async function deleteImportedPaper(paperId: string) {
+  if (!('caches' in window)) {
+    removeOfflineReadingState(paperId)
+    writeLibrary(readLibrary().filter((entry) => entry.id !== paperId))
+    return
+  }
+
+  const cache = await window.caches.open(PAPER_CACHE_NAME)
+  const listUrl = localCacheUrl('/api/papers')
+  const response = await cache.match(listUrl)
+  if (response) {
+    const papers = await response.json() as PaperSummary[]
+    await cache.put(
+      listUrl,
+      new Response(JSON.stringify(papers.filter((paper) => paper.id !== paperId)), {
+        headers: { 'Content-Type': 'application/json; charset=utf-8' },
+      }),
+    )
+  }
+  await removeOfflinePaper(paperId)
+}
+
+export async function clearImportedPapers() {
+  for (const entry of readLibrary()) {
+    await deleteImportedPaper(entry.id)
+  }
+}
+
+export async function estimateOfflineLibraryBytes() {
+  const entries = readLibrary()
+  const recordedBytes = entries.reduce((total, entry) => total + (entry.packageBytes ?? 0), 0)
+  if (recordedBytes > 0 && entries.every((entry) => typeof entry.packageBytes === 'number')) {
+    return recordedBytes
+  }
+  if (!('caches' in window)) return recordedBytes
+
+  const cache = await window.caches.open(PAPER_CACHE_NAME)
+  const keys = await cache.keys()
+  const sizes = await Promise.all(
+    keys.map(async (request) => {
+      const response = await cache.match(request)
+      return response ? (await response.blob()).size : 0
+    }),
+  )
+  return sizes.reduce((total, size) => total + size, 0)
 }

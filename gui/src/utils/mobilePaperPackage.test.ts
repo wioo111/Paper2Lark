@@ -5,7 +5,12 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { fetchPaperAnnotations, fetchPaperDetail, fetchReadingState } from '@/api'
 import type { PaperSummary } from '@/types'
-import { createMobilePaperPackage, importMobilePaperPackage } from '@/utils/mobilePaperPackage'
+import {
+  createMobileLibraryPackage,
+  createMobilePaperPackage,
+  extractPaperPackages,
+  importMobilePaperPackage,
+} from '@/utils/mobilePaperPackage'
 
 vi.mock('@/api', () => ({
   fetchPaperAnnotations: vi.fn(),
@@ -98,5 +103,22 @@ describe('mobile paper package export', () => {
     expect(result.fileName).toBe('Offline-paper.carkpaper')
     expect(result.blob.size).toBeGreaterThan(0)
     expect(result.manifest.paper.summary.id).toBe('paper-1')
+  })
+
+  it('wraps the whole library in a transferable and verifiable archive', async () => {
+    const manifest = validManifest()
+    const summary = manifest.paper.summary as PaperSummary
+    vi.mocked(fetchPaperDetail).mockResolvedValue(manifest.paper.detail as never)
+    vi.mocked(fetchPaperAnnotations).mockResolvedValue([])
+    vi.mocked(fetchReadingState).mockResolvedValue(manifest.paper.readingState as never)
+
+    const result = await createMobileLibraryPackage([summary])
+    const file = new File([result.blob], result.fileName, { type: 'application/vnd.cark.library+zip' })
+    const packages = await extractPaperPackages(file)
+
+    expect(result.fileName).toMatch(/^cark-library-.*\.carklibrary$/)
+    expect(result.manifest.paperCount).toBe(1)
+    expect(packages).toHaveLength(1)
+    expect(packages[0].name).toMatch(/\.carkpaper$/)
   })
 })

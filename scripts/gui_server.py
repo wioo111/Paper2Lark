@@ -14,6 +14,7 @@ import gui_annotations
 import gui_app_settings
 import gui_app_utils
 import gui_http
+import gui_library_packages
 import gui_copilot
 import gui_papers
 import gui_server_bindings
@@ -350,6 +351,21 @@ update_annotation_comment = _ANNOTATION_FACADE.update_annotation_comment
 update_annotation = _ANNOTATION_FACADE.update_annotation
 delete_annotation = _ANNOTATION_FACADE.delete_annotation
 
+
+def import_paper_package(data: bytes) -> dict[str, object]:
+    return gui_library_packages.import_paper_package(
+        data,
+        runtime_output_dir=RUNTIME_OUTPUT_DIR,
+        memory_root=MEMORY_ROOT_DIR,
+        store=STORE,
+        sync_paper_index=sync_paper_index,
+        get_record=get_record,
+        encode_paper_id=encode_paper_id,
+        refresh_record_search_index=refresh_record_search_index,
+        build_paper_summary=build_paper_summary,
+        current_timestamp_iso=current_timestamp_iso,
+    )
+
 resolve_open_target = gui_server_runtime.resolve_open_target
 
 open_in_explorer = partial(
@@ -375,6 +391,7 @@ SERVER_BINDINGS = gui_server_bindings.ServerBindings(
     create_upload_task_getter=lambda: create_upload_task,
     import_zotero_paper_getter=lambda: import_zotero_paper,
     retry_upload_task_getter=lambda: retry_upload_task,
+    import_paper_package_getter=lambda: import_paper_package,
     get_record_getter=lambda: get_record,
     resolve_open_target_getter=lambda: resolve_open_target,
     open_in_explorer_getter=lambda: open_in_explorer,
