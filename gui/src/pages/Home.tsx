@@ -15,6 +15,8 @@ import {
 } from '@/api'
 import { PaperListItem } from '@/components/PaperListItem'
 import { MemoryInbox } from '@/components/MemoryInbox'
+import { LibraryTransferActions } from '@/components/LibraryTransferActions'
+import { MobileAppSettings } from '@/components/MobileAppSettings'
 import { OpenQuestions } from '@/components/OpenQuestions'
 import { RecentInsights } from '@/components/RecentInsights'
 import { SettingsPanel } from '@/components/SettingsPanel'
@@ -35,7 +37,7 @@ import type {
 } from '@/types'
 import { buildSearchResultHref, matchesQuery } from '@/utils/paper'
 import { isNativeOfflineMode } from '@/utils/apiBase'
-import { updateOfflinePaperSummary } from '@/utils/offlineLibrary'
+import { deleteImportedPaper, updateOfflinePaperSummary } from '@/utils/offlineLibrary'
 
 type LibraryFilter = 'all' | 'favorite' | 'annotated' | 'memory' | PaperReadingStatus
 
@@ -96,6 +98,7 @@ export default function Home() {
   const [tasks, setTasks] = useState<ProcessingTask[]>([])
   const [tasksLoading, setTasksLoading] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
+  const [mobileSettingsOpen, setMobileSettingsOpen] = useState(false)
   const [zoteroOpen, setZoteroOpen] = useState(false)
   const [bootstrapError, setBootstrapError] = useState<string | null>(null)
   const [uploadError, setUploadError] = useState<string | null>(null)
@@ -426,6 +429,19 @@ export default function Home() {
     void handleLibraryUpdate(paper, { tags })
   }
 
+  async function handleDeleteImportedPaper(paper: PaperSummary) {
+    if (!window.confirm(`确定从这台设备删除《${paper.title}》？本机批注和阅读位置也会一并删除。`)) return
+    setUpdatingPaperId(paper.id)
+    try {
+      await deleteImportedPaper(paper.id)
+      await refreshPapers()
+    } catch (deleteError) {
+      setBootstrapError(deleteError instanceof Error ? deleteError.message : '删除本机文献失败')
+    } finally {
+      setUpdatingPaperId(null)
+    }
+  }
+
   return (
     <main className="cark-page min-h-screen">
       <div className="mx-auto min-h-screen max-w-[1600px] px-6 py-6 lg:px-8">
@@ -435,17 +451,18 @@ export default function Home() {
             <h1 className="cark-title mt-1 font-serif text-3xl">论文库</h1>
           </div>
           <div className="flex flex-wrap items-center justify-end gap-3">
-            <ThemeSwitch />
-            {!nativeOffline ? (
-              <button
-                type="button"
-                onClick={() => setSettingsOpen(true)}
-                className="cark-button-secondary inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm"
-              >
-                <Settings2 className="h-4 w-4" />
-                设置
-              </button>
+            {!nativeApp ? (
+              <LibraryTransferActions papers={papers} onImported={refreshPapers} />
             ) : null}
+            <ThemeSwitch />
+            <button
+              type="button"
+              onClick={() => nativeApp ? setMobileSettingsOpen(true) : setSettingsOpen(true)}
+              className="cark-button-secondary inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm"
+            >
+              <Settings2 className="h-4 w-4" />
+              设置
+            </button>
           </div>
         </header>
 
@@ -567,6 +584,7 @@ export default function Home() {
                         void handleLibraryUpdate(targetPaper, { readingStatus })
                       }
                       onTagsEdit={handleTagsEdit}
+                      onDelete={nativeOffline ? (targetPaper) => void handleDeleteImportedPaper(targetPaper) : undefined}
                     />
                   ))}
                 </div>
@@ -632,6 +650,7 @@ export default function Home() {
                       void handleLibraryUpdate(targetPaper, { readingStatus })
                     }
                     onTagsEdit={handleTagsEdit}
+                    onDelete={nativeOffline ? (targetPaper) => void handleDeleteImportedPaper(targetPaper) : undefined}
                   />
                 ))}
                 {!papersLoading && filteredPapers.length === 0 ? (
@@ -691,6 +710,11 @@ export default function Home() {
         open={zoteroOpen}
         onClose={() => setZoteroOpen(false)}
         onImported={handleZoteroImported}
+      /> : null}
+      {nativeApp ? <MobileAppSettings
+        open={mobileSettingsOpen}
+        onClose={() => setMobileSettingsOpen(false)}
+        onLibraryChanged={() => void refreshPapers()}
       /> : null}
     </main>
   )

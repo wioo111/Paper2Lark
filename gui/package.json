@@ -1,13 +1,14 @@
 {
   "name": "gui",
   "private": true,
-  "version": "0.0.0",
+  "version": "1.0.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
     "android:sync": "npm run build && cap sync android",
     "android:apk": "powershell -ExecutionPolicy Bypass -File ../scripts/build_android.ps1",
+    "android:bundle": "powershell -ExecutionPolicy Bypass -File ../scripts/build_android.ps1 -Release",
     "lint": "eslint .",
     "preview": "vite preview",
     "check": "tsc -b --noEmit",

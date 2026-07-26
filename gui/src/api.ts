@@ -35,6 +35,13 @@ import type {
   ZoteroStatus,
 } from '@/types'
 import { isNativeOfflineMode, withApiBaseUrl } from '@/utils/apiBase'
+import {
+  createOfflineAnnotationComment,
+  createOfflinePaperAnnotation,
+  deleteOfflinePaperAnnotation,
+  updateOfflineAnnotationComment,
+  updateOfflinePaperAnnotation,
+} from '@/utils/offlineAnnotations'
 
 function createDefaultCopilotAgent(overrides?: Partial<CopilotAgentConfig>): CopilotAgentConfig {
   return {
@@ -403,6 +410,7 @@ export function postRetryCopilotRun(paperId: string, runId: string, agentId?: st
 }
 
 export function postPaperAnnotation(id: string, payload: CreatePaperAnnotationInput) {
+  if (isNativeOfflineMode()) return createOfflinePaperAnnotation(id, payload)
   return requestJson<PaperAnnotation[]>(
     `/api/papers/${encodeURIComponent(id)}/annotations`,
     {
@@ -416,6 +424,7 @@ export function postPaperAnnotation(id: string, payload: CreatePaperAnnotationIn
 }
 
 export function postAnnotationComment(paperId: string, annotationId: string, payload: CreateAnnotationCommentInput) {
+  if (isNativeOfflineMode()) return createOfflineAnnotationComment(paperId, annotationId, payload)
   return requestJson<PaperAnnotation[]>(
     `/api/papers/${encodeURIComponent(paperId)}/annotations/${encodeURIComponent(annotationId)}/comments`,
     {
@@ -434,6 +443,7 @@ export function patchAnnotationComment(
   commentId: string,
   payload: UpdateAnnotationCommentInput,
 ) {
+  if (isNativeOfflineMode()) return updateOfflineAnnotationComment(paperId, annotationId, commentId, payload)
   return requestJson<PaperAnnotation[]>(
     `/api/papers/${encodeURIComponent(paperId)}/annotations/${encodeURIComponent(annotationId)}/comments/${encodeURIComponent(commentId)}`,
     {
@@ -447,6 +457,7 @@ export function patchAnnotationComment(
 }
 
 export function patchPaperAnnotation(paperId: string, annotationId: string, payload: UpdatePaperAnnotationInput) {
+  if (isNativeOfflineMode()) return updateOfflinePaperAnnotation(paperId, annotationId, payload)
   return requestJson<PaperAnnotation[]>(
     `/api/papers/${encodeURIComponent(paperId)}/annotations/${encodeURIComponent(annotationId)}`,
     {
@@ -460,6 +471,7 @@ export function patchPaperAnnotation(paperId: string, annotationId: string, payl
 }
 
 export function deletePaperAnnotation(paperId: string, annotationId: string) {
+  if (isNativeOfflineMode()) return deleteOfflinePaperAnnotation(paperId, annotationId)
   return requestJson<PaperAnnotation[]>(
     `/api/papers/${encodeURIComponent(paperId)}/annotations/${encodeURIComponent(annotationId)}`,
     {
@@ -567,6 +579,19 @@ export async function postUploadPdf(file: File) {
   }
 
   return response.json() as Promise<ProcessingTask>
+}
+
+export function postImportPaperPackage(file: File) {
+  return requestJson<PaperSummary>(
+    '/api/library/import-paper',
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/vnd.cark.paper+zip',
+      },
+      body: file,
+    },
+  )
 }
 
 export function postAnnotationAgentComment(paperId: string, payload: InvokeAnnotationAgentInput) {

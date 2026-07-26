@@ -87,9 +87,12 @@ class TranslateContentTests(unittest.TestCase):
             "```python\nprint('hello')\n```",
             "    print('hello')",
             "![](images/chart.png)",
+            "![](images/chart.png)\n(b)",
             "$$x + y = z$$",
+            "<table><tr><td>t</td><td>2δ</td><td>Δ</td></tr></table>",
             "---",
             "# BERT",
+            "## 3. Video-MME",
         ):
             with patch("translate_content.requests.post") as post:
                 translated, ok = translate_chunk(
@@ -124,6 +127,77 @@ class TranslateContentTests(unittest.TestCase):
                     translate_file(input_path, output_path)
 
             self.assertFalse(output_path.exists())
+
+    def test_structure_protection_fallback_preserves_formula(self):
+        invalid = completion("not json")
+        segmented = completion(
+            json.dumps(
+                {
+                    "block_id": "block-0001",
+                    "translations": {"segment-0001": "得分为"},
+                },
+                ensure_ascii=False,
+            )
+        )
+        with patch(
+            "translate_content.requests.post",
+            side_effect=[invalid, segmented],
+        ), patch("translate_content.time.sleep"):
+            translated, ok = translate_chunk(
+                "The score is $x$.",
+                "api-key",
+                "https://example.test/v1",
+                "model",
+                max_retries=1,
+            )
+
+        self.assertTrue(ok)
+        self.assertEqual(translated, "The score is $x$.\n\n得分为 $x$.")
+
+    def test_successful_blocks_are_reused_from_checkpoint(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            input_path = Path(temp_dir) / "paper.md"
+            output_path = Path(temp_dir) / "paper_bilingual.md"
+            input_path.write_text("Original paragraph", encoding="utf-8")
+            with patch.dict(os.environ, {"OPENAI_API_KEY": "key"}), patch(
+                "translate_content.translate_chunk",
+                return_value=("Original paragraph\n\n中文译文", True),
+            ) as translate:
+                translate_file(input_path, output_path)
+                translate_file(input_path, output_path)
+
+            self.assertEqual(translate.call_count, 1)
+            self.assertEqual(
+                output_path.read_text(encoding="utf-8"),
+                "Original paragraph\n\n中文译文",
+            )
+
+    def test_checkpoint_lookup_survives_block_id_shift(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            input_path = Path(temp_dir) / "paper.md"
+            output_path = Path(temp_dir) / "paper_bilingual.md"
+            input_path.write_text("First paragraph\n\nSecond paragraph", encoding="utf-8")
+            with patch.dict(os.environ, {"OPENAI_API_KEY": "key"}), patch(
+                "translate_content.translate_chunk",
+                side_effect=[
+                    ("First paragraph\n\n第一段", True),
+                    ("Second paragraph\n\n第二段", True),
+                ],
+            ):
+                translate_file(input_path, output_path)
+
+            input_path.write_text(
+                "New paragraph\n\nFirst paragraph\n\nSecond paragraph",
+                encoding="utf-8",
+            )
+            with patch.dict(os.environ, {"OPENAI_API_KEY": "key"}), patch(
+                "translate_content.translate_chunk",
+                return_value=("New paragraph\n\n新增段落", True),
+            ) as translate:
+                translate_file(input_path, output_path)
+
+            self.assertEqual(translate.call_count, 1)
+            self.assertIn("First paragraph\n\n第一段", output_path.read_text(encoding="utf-8"))
 
 
 if __name__ == "__main__":

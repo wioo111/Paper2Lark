@@ -2,7 +2,13 @@
 
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { downloadPaperForOffline, isPaperOffline, updateOfflinePaperSummary } from '@/utils/offlineLibrary'
+import {
+  deleteImportedPaper,
+  downloadPaperForOffline,
+  isPaperOffline,
+  registerOfflinePaper,
+  updateOfflinePaperSummary,
+} from '@/utils/offlineLibrary'
 import type { PaperDetail } from '@/types'
 
 describe('offline paper library', () => {
@@ -49,5 +55,46 @@ describe('offline paper library', () => {
     expect(put).toHaveBeenCalledOnce()
     expect(fetchMock).not.toHaveBeenCalled()
     vi.unstubAllGlobals()
+  })
+
+  it('deletes an imported paper, its assets, and its local reading state', async () => {
+    const listUrl = new URL('/api/papers', window.location.origin).href
+    const detailUrl = new URL('/api/papers/paper-1', window.location.origin).href
+    const assetUrl = new URL('/api/media/shared-image', window.location.origin).href
+    const stored = new Map<string, Response>([
+      [listUrl, new Response(JSON.stringify([
+        { id: 'paper-1', title: 'Paper One' },
+        { id: 'paper-2', title: 'Paper Two' },
+      ]))],
+      [detailUrl, new Response('{}')],
+      [assetUrl, new Response('image')],
+    ])
+    const cache = {
+      keys: vi.fn(async () => [...stored.keys()].map((url) => new Request(url))),
+      match: vi.fn(async (input: RequestInfo | URL) => stored.get(String(input))?.clone()),
+      put: vi.fn(async (input: RequestInfo | URL, response: Response) => {
+        stored.set(String(input), response.clone())
+      }),
+      delete: vi.fn(async (input: RequestInfo | URL) => stored.delete(input instanceof Request ? input.url : String(input))),
+    }
+    Object.defineProperty(window, 'caches', {
+      configurable: true,
+      value: { open: vi.fn().mockResolvedValue(cache) },
+    })
+    registerOfflinePaper({
+      id: 'paper-1',
+      title: 'Paper One',
+      downloadedAt: '2026-07-24T00:00:00Z',
+      assetUrls: ['/api/media/shared-image'],
+    })
+    localStorage.setItem('cark-offline-reading-state:paper-1', '{"paperId":"paper-1"}')
+
+    await deleteImportedPaper('paper-1')
+
+    expect(JSON.parse(await stored.get(listUrl)!.text())).toEqual([{ id: 'paper-2', title: 'Paper Two' }])
+    expect(stored.has(detailUrl)).toBe(false)
+    expect(stored.has(assetUrl)).toBe(false)
+    expect(isPaperOffline('paper-1')).toBe(false)
+    expect(localStorage.getItem('cark-offline-reading-state:paper-1')).toBeNull()
   })
 })

@@ -3,6 +3,7 @@ import { LoaderCircle, Server, Wifi } from 'lucide-react'
 import { type FormEvent, type ReactNode, useState } from 'react'
 
 import { MobilePaperImportButton } from '@/components/MobilePaperImportButton'
+import { NativePaperImportHandler } from '@/components/NativePaperImportHandler'
 import { getApiBaseUrl, normalizeServerUrl, setApiBaseUrl } from '@/utils/apiBase'
 import { listOfflinePapers } from '@/utils/offlineLibrary'
 
@@ -43,6 +44,7 @@ export function MobileServerGate({ children }: { children: ReactNode }) {
   if (!editing) {
     return (
       <>
+        <NativePaperImportHandler />
         {children}
         {window.location.pathname === '/' ? <div
           className="fixed right-3 z-[80] flex flex-col items-end gap-2"
@@ -63,8 +65,10 @@ export function MobileServerGate({ children }: { children: ReactNode }) {
   }
 
   return (
-    <main className="cark-page flex min-h-screen items-center justify-center px-5 py-10">
-      <form onSubmit={(event) => void handleSubmit(event)} className="cark-panel cark-elevated w-full max-w-[460px] rounded-[30px] p-6">
+    <>
+      <NativePaperImportHandler />
+      <main className="cark-page flex min-h-screen items-center justify-center px-5 py-10">
+        <form onSubmit={(event) => void handleSubmit(event)} className="cark-panel cark-elevated w-full max-w-[460px] rounded-[30px] p-6">
         <div className="cark-button-accent inline-flex h-12 w-12 items-center justify-center rounded-2xl">
           <Server className="h-5 w-5" />
         </div>
@@ -97,7 +101,8 @@ export function MobileServerGate({ children }: { children: ReactNode }) {
             {testing ? '正在连接' : '连接并进入'}
           </button>
         </div>
-      </form>
-    </main>
+        </form>
+      </main>
+    </>
   )
 }

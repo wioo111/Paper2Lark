@@ -8,8 +8,12 @@ import { resolveMediaUrl } from '@/utils/markdown'
 
 const PACKAGE_FORMAT = 'cark-paper-package'
 const PACKAGE_VERSION = 1
+const LIBRARY_PACKAGE_FORMAT = 'cark-library-package'
+const LIBRARY_PACKAGE_VERSION = 1
 const MAX_PACKAGE_BYTES = 512 * 1024 * 1024
 const MAX_UNPACKED_BYTES = 1024 * 1024 * 1024
+const MAX_LIBRARY_PACKAGE_BYTES = 2 * 1024 * 1024 * 1024
+const MAX_LIBRARY_UNPACKED_BYTES = 3 * 1024 * 1024 * 1024
 
 interface PackageAsset {
   url: string
@@ -29,6 +33,26 @@ interface MobilePaperManifest {
     readingState: ReadingState
   }
   assets: PackageAsset[]
+}
+
+interface MobileLibraryManifest {
+  format: typeof LIBRARY_PACKAGE_FORMAT
+  version: typeof LIBRARY_PACKAGE_VERSION
+  createdAt: string
+  paperCount: number
+  papers: Array<{
+    id: string
+    title: string
+    path: string
+    sha256: string
+    bytes: number
+  }>
+}
+
+export interface PackageProgress {
+  completed: number
+  total: number
+  title: string
 }
 
 function markdownImageSources(markdown: string) {
@@ -68,6 +92,18 @@ function safeFileName(value: string) {
 
 function jsonBytes(value: unknown) {
   return strToU8(JSON.stringify(value))
+}
+
+async function readBlobBytes(blob: Blob) {
+  if (typeof blob.arrayBuffer === 'function') {
+    return new Uint8Array(await blob.arrayBuffer())
+  }
+  return new Promise<Uint8Array>((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onerror = () => reject(reader.error ?? new Error('文件读取失败'))
+    reader.onload = () => resolve(new Uint8Array(reader.result as ArrayBuffer))
+    reader.readAsArrayBuffer(blob)
+  })
 }
 
 async function loadAsset(url: string, index: number): Promise<{ asset: PackageAsset; bytes: Uint8Array }> {
@@ -127,6 +163,40 @@ export function downloadMobilePaperPackage(blob: Blob, fileName: string) {
   window.setTimeout(() => URL.revokeObjectURL(url), 1000)
 }
 
+export async function createMobileLibraryPackage(
+  papers: PaperSummary[],
+  onProgress?: (progress: PackageProgress) => void,
+) {
+  if (papers.length === 0) throw new Error('论文库为空，无法打包')
+  const files: Record<string, Uint8Array> = {}
+  const entries: MobileLibraryManifest['papers'] = []
+  for (const [index, paper] of papers.entries()) {
+    const packaged = await createMobilePaperPackage(paper)
+    const bytes = await readBlobBytes(packaged.blob)
+    const path = `papers/${String(index + 1).padStart(4, '0')}-${safeFileName(paper.title)}.carkpaper`
+    files[path] = bytes
+    entries.push({
+      id: paper.id,
+      title: paper.title,
+      path,
+      sha256: await sha256(bytes),
+      bytes: bytes.byteLength,
+    })
+    onProgress?.({ completed: index + 1, total: papers.length, title: paper.title })
+  }
+  const manifest: MobileLibraryManifest = {
+    format: LIBRARY_PACKAGE_FORMAT,
+    version: LIBRARY_PACKAGE_VERSION,
+    createdAt: new Date().toISOString(),
+    paperCount: entries.length,
+    papers: entries,
+  }
+  files['manifest.json'] = jsonBytes(manifest)
+  const blob = new Blob([zipSync(files, { level: 0 }) as BlobPart], { type: 'application/vnd.cark.library+zip' })
+  const timestamp = new Date().toISOString().replace(/[-:]/g, '').slice(0, 13)
+  return { blob, fileName: `cark-library-${timestamp}.carklibrary`, manifest }
+}
+
 function parseManifest(files: Record<string, Uint8Array>): MobilePaperManifest {
   const raw = files['manifest.json']
   if (!raw) throw new Error('文献包缺少 manifest.json')
@@ -164,7 +234,7 @@ export async function importMobilePaperPackage(file: File) {
   if (file.size > MAX_PACKAGE_BYTES) throw new Error('文献包超过 512 MB，拒绝导入')
   let files: Record<string, Uint8Array>
   try {
-    files = unzipSync(new Uint8Array(await file.arrayBuffer()))
+    files = unzipSync(await readBlobBytes(file))
   } catch {
     throw new Error('文献包已损坏或不是有效的 .carkpaper 文件')
   }
@@ -189,6 +259,75 @@ export async function importMobilePaperPackage(file: File) {
   for (const asset of manifest.assets) {
     await cache.put(localCacheUrl(asset.url), new Response(files[asset.path], { headers: { 'Content-Type': asset.contentType } }))
   }
-  registerOfflinePaper({ id: manifest.paper.summary.id, title: manifest.paper.summary.title, downloadedAt: new Date().toISOString() })
+  registerOfflinePaper({
+    id: manifest.paper.summary.id,
+    title: manifest.paper.summary.title,
+    downloadedAt: new Date().toISOString(),
+    assetUrls: manifest.assets.map((asset) => asset.url),
+    packageBytes: file.size,
+  })
   return manifest.paper.summary
+}
+
+function libraryManifest(files: Record<string, Uint8Array>): MobileLibraryManifest | null {
+  const raw = files['manifest.json']
+  if (!raw) return null
+  let manifest: MobileLibraryManifest
+  try {
+    manifest = JSON.parse(strFromU8(raw)) as MobileLibraryManifest
+  } catch {
+    return null
+  }
+  return manifest.format === LIBRARY_PACKAGE_FORMAT ? manifest : null
+}
+
+export async function extractPaperPackages(file: File) {
+  if (!file.name.toLowerCase().endsWith('.carklibrary')) return [file]
+  if (file.size > MAX_LIBRARY_PACKAGE_BYTES) throw new Error('整库包超过 2 GB，拒绝导入')
+  let files: Record<string, Uint8Array>
+  try {
+    files = unzipSync(await readBlobBytes(file))
+  } catch {
+    throw new Error('整库包已损坏或不是有效的 .carklibrary 文件')
+  }
+  const totalBytes = Object.values(files).reduce((total, bytes) => total + bytes.byteLength, 0)
+  if (totalBytes > MAX_LIBRARY_UNPACKED_BYTES) throw new Error('整库包解压后超过 3 GB，拒绝导入')
+  const manifest = libraryManifest(files)
+  if (!manifest || manifest.version !== LIBRARY_PACKAGE_VERSION) throw new Error('整库包格式或版本不受支持')
+  if (!Array.isArray(manifest.papers) || manifest.paperCount !== manifest.papers.length || manifest.paperCount === 0) {
+    throw new Error('整库包论文清单无效')
+  }
+
+  const packages: File[] = []
+  for (const entry of manifest.papers) {
+    if (!entry.path.startsWith('papers/') || !entry.path.endsWith('.carkpaper') || entry.path.includes('..')) {
+      throw new Error('整库包包含非法文献路径')
+    }
+    const bytes = files[entry.path]
+    if (!bytes || bytes.byteLength !== entry.bytes || await sha256(bytes) !== entry.sha256) {
+      throw new Error(`整库包文献校验失败：${entry.title}`)
+    }
+    const paperFile = new File([bytes as BlobPart], entry.path.split('/').pop() || 'paper.carkpaper', {
+      type: 'application/vnd.cark.paper+zip',
+    })
+    if (!paperFile.arrayBuffer) {
+      Object.defineProperty(paperFile, 'arrayBuffer', { value: async () => bytes.buffer })
+    }
+    packages.push(paperFile)
+  }
+  return packages
+}
+
+export async function importMobileTransferPackage(
+  file: File,
+  onProgress?: (progress: PackageProgress) => void,
+) {
+  const packages = await extractPaperPackages(file)
+  const imported: PaperSummary[] = []
+  for (const [index, paperFile] of packages.entries()) {
+    const paper = await importMobilePaperPackage(paperFile)
+    imported.push(paper)
+    onProgress?.({ completed: index + 1, total: packages.length, title: paper.title })
+  }
+  return imported
 }

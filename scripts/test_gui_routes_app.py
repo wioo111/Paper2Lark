@@ -95,6 +95,36 @@ class GuiRoutesAppTests(unittest.TestCase):
         read_binary_body.assert_not_called()
         self.assertEqual(handler.json_calls, [({"error": "当前环境还不能上传"}, HTTPStatus.BAD_REQUEST)])
 
+    def test_handle_post_imports_paper_package(self):
+        handler = FakeHandler()
+        importer = Mock(return_value={"id": "paper-1", "title": "Imported"})
+        package_bytes = b"package"
+
+        handled = gui_routes_app.handle_post(
+            handler,
+            urlparse("/api/library/import-paper"),
+            read_json_body=Mock(),
+            read_binary_body=Mock(return_value=package_bytes),
+            save_settings=Mock(),
+            create_agent_memory_item=Mock(),
+            run_connection_test=Mock(),
+            ensure_upload_ready=Mock(),
+            create_upload_task=Mock(),
+            import_zotero_paper=Mock(),
+            retry_upload_task=Mock(),
+            activate_memory_candidate=Mock(),
+            archive_memory_candidate=Mock(),
+            get_record=Mock(),
+            resolve_open_target=Mock(),
+            open_in_explorer=Mock(),
+            runtime_output_dir=Path("."),
+            import_paper_package=importer,
+        )
+
+        self.assertTrue(handled)
+        importer.assert_called_once_with(package_bytes)
+        self.assertEqual(handler.json_calls, [({"id": "paper-1", "title": "Imported"}, HTTPStatus.CREATED)])
+
     def test_handle_post_open_runtime_creates_directory(self):
         handler = FakeHandler()
         open_in_explorer = Mock()

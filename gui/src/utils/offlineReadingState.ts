@@ -28,6 +28,10 @@ export function saveOfflineReadingState(
   return value
 }
 
+export function removeOfflineReadingState(paperId: string) {
+  window.localStorage.removeItem(keyFor(paperId))
+}
+
 export function preferNewestReadingState(server: ReadingState | null, local: ReadingState | null) {
   if (!server) return local
   if (!local) return server
